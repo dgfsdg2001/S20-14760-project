@@ -1,0 +1,17 @@
+Config ns3 
+```
+./waf clean
+./waf configure --build-profile=optimized --enable-examples --enable-tests
+./waf configure --build-profile=debug --enable-examples --enable-tests
+```
+
+Build ns3
+```
+./waf
+./waf --check-profile
+```
+
+Run myApp
+```
+./waf --run myApp
+```
