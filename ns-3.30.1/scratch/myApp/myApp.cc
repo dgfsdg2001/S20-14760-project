@@ -4,6 +4,9 @@
 #include "ns3/internet-module.h"
 #include "ns3/point-to-point-module.h"
 #include "ns3/ipv4-global-routing-helper.h"
+#include "ns3/netanim-module.h"
+#include "ns3/flow-monitor-helper.h"
+#include "ns3/ipv4-flow-classifier.h"
 
 using namespace ns3;
 //
@@ -22,6 +25,9 @@ using namespace ns3;
 #define SERVER_NODE 3
 #define START_SEC 0.0
 #define END_SEC 10.0
+
+AnimationInterface * pAnim = 0;
+void modify ();
 
 // The number of bytes to send in this simulation.
 static const uint32_t totalTxBytes = 2000000;
@@ -54,6 +60,12 @@ int main(int argc, char** argv) {
     NodeContainer wifiServer = NodeContainer(
         allNodes.Get(WIFI_AP_NODE), allNodes.Get(SERVER_NODE));
 
+    // Set position of nodes
+    AnimationInterface::SetConstantPosition (allNodes.Get(MOBILE_NODE), 30, 30);
+    AnimationInterface::SetConstantPosition (allNodes.Get(WIFI_AP_NODE), 50, 10);
+    AnimationInterface::SetConstantPosition (allNodes.Get(LTE_BASESTATION_NDOE), 50, 50);
+    AnimationInterface::SetConstantPosition (allNodes.Get(SERVER_NODE), 70, 30);
+
     // Install network stacks on the nodes
     InternetStackHelper internet;
     internet.Install (allNodes);
@@ -61,37 +73,39 @@ int main(int argc, char** argv) {
     // We create the channels first without any IP addressing information
     NS_LOG_INFO ("Create channels.");
     PointToPointHelper p2p;
-    p2p.SetDeviceAttribute ("DataRate", StringValue ("5Mbps"));
-    p2p.SetChannelAttribute ("Delay", StringValue ("2ms"));
-    NetDeviceContainer devMobileLte = p2p.Install (mobileLte);
-    
-    p2p.SetDeviceAttribute ("DataRate", StringValue ("5Mbps"));
+    p2p.SetDeviceAttribute ("DataRate", StringValue ("100Mbps"));
     p2p.SetChannelAttribute ("Delay", StringValue ("2ms"));
     NetDeviceContainer devMobileWifi = p2p.Install (mobileWifi);
 
-    p2p.SetDeviceAttribute ("DataRate", StringValue ("5Mbps"));
+    p2p.SetDeviceAttribute ("DataRate", StringValue ("100Mbps"));
     p2p.SetChannelAttribute ("Delay", StringValue ("2ms"));
-    NetDeviceContainer devLteServer = p2p.Install (lteServer);
+    NetDeviceContainer devMobileLte = p2p.Install (mobileLte);
 
-    p2p.SetDeviceAttribute ("DataRate", StringValue ("5Mbps"));
+    p2p.SetDeviceAttribute ("DataRate", StringValue ("100Mbps"));
     p2p.SetChannelAttribute ("Delay", StringValue ("2ms"));
     NetDeviceContainer devWifiServer = p2p.Install (wifiServer);
+
+    p2p.SetDeviceAttribute ("DataRate", StringValue ("100Mbps"));
+    p2p.SetChannelAttribute ("Delay", StringValue ("2ms"));
+    NetDeviceContainer devLteServer = p2p.Install (lteServer);
 
     // Later, we add IP addresses.
     NS_LOG_INFO ("Assign IP Addresses.");
     Ipv4AddressHelper ipv4;
-    ipv4.SetBase ("10.1.1.0", "255.255.255.0");
-    
-    ipv4.SetBase ("10.2.1.0", "255.255.255.0");
+
+    ipv4.SetBase ("10.1.2.0", "255.255.255.0");
     ipv4.Assign (devMobileWifi);
+
+    ipv4.SetBase ("10.1.3.0", "255.255.255.0");
+    ipv4.Assign (devMobileLte);
+
+    ipv4.SetBase ("10.2.1.0", "255.255.255.0");
+    ipv4.Assign (devWifiServer);
+    Ipv4InterfaceContainer ipWifiServer = ipv4.Assign (devWifiServer);
 
     ipv4.SetBase ("10.3.1.0", "255.255.255.0");
     ipv4.Assign (devLteServer);
-    Ipv4InterfaceContainer ipLteServer = ipv4.Assign (devMobileLte);
-
-    ipv4.SetBase ("10.4.1.0", "255.255.255.0");
-    ipv4.Assign (devWifiServer);
-    Ipv4InterfaceContainer ipWifiServer = ipv4.Assign (devMobileLte);
+    Ipv4InterfaceContainer ipLteServer = ipv4.Assign (devLteServer);
 
     //Turn on global static routing
     Ipv4GlobalRoutingHelper::PopulateRoutingTables ();
@@ -124,9 +138,63 @@ int main(int argc, char** argv) {
     // AsciiTraceHelper ascii;
     // p2p.EnableAsciiAll (ascii.CreateFileStream ("tcp-large-transfer.tr"));
     // p2p.EnablePcapAll ("tcp-large-transfer");
-    Simulator::Stop (Seconds (1000));
+    Simulator::Stop (Seconds (END_SEC + 1));
+
+    // Create the animation object and configure for specified output
+    pAnim = new AnimationInterface ("myApp.xml");
+    pAnim->UpdateNodeDescription(allNodes.Get(MOBILE_NODE), "Mobile Device");
+    pAnim->UpdateNodeDescription(allNodes.Get(WIFI_AP_NODE), "Wi-Fi AP");
+    pAnim->UpdateNodeDescription(allNodes.Get(LTE_BASESTATION_NDOE), "LTE Base Station");
+    pAnim->UpdateNodeDescription(allNodes.Get(SERVER_NODE), "Server");
+
+
+
+    // Provide the absolute path to the resource
+    // [Shaomin] Maybe useful in future
+    // uint32_t (global) resourceId1 = pAnim->AddResource ("/Users/john/ns3/netanim-3.105/ns-3-logo1.png");
+    // uint32_t (global) resourceId2 = pAnim->AddResource ("/Users/john/ns3/netanim-3.105/ns-3-logo2.png");
+    // pAnim->SetBackgroundImage ("/Users/john/ns3/netanim-3.105/ns-3-background.png", 0, 0, 0.2, 0.2, 0.1);
+    
+    // [Shaomin] Do we need it ?
+    // Simulator::Schedule (Seconds (0.1), modify);
+
+    // Install FlowMonitor on all nodes
+    FlowMonitorHelper flowmon;
+    Ptr<FlowMonitor> monitor = flowmon.InstallAll ();
+
+    // Trace routing tables 
+    // Ipv4GlobalRoutingHelper g;
+    // Ptr<OutputStreamWrapper> routingStream = Create<OutputStreamWrapper> ("myApp.routes", std::ios::out);
+    // g.PrintRoutingTableAllAt (Seconds (0), routingStream);
+
     Simulator::Run ();
+    std::cout << "Animation Trace file created:"
+                << "myApp.xml" << std::endl;
+
+    // Print per flow statistics
+    monitor->CheckForLostPackets ();
+    Ptr<Ipv4FlowClassifier> classifier = DynamicCast<Ipv4FlowClassifier> (flowmon.GetClassifier ());
+    FlowMonitor::FlowStatsContainer stats = monitor->GetFlowStats ();
+    for (std::map<FlowId, FlowMonitor::FlowStats>::const_iterator i = stats.begin (); i != stats.end (); ++i)
+    {
+        // first 2 FlowIds are for ECHO apps, we don't want to display them
+        //
+        // Duration for throughput measurement is 9.0 seconds, since
+        //   StartTime of the OnOffApplication is at about "second 1"
+        // and
+        //   Simulator::Stops at "second 10".
+        Ipv4FlowClassifier::FiveTuple t = classifier->FindFlow (i->first);
+        std::cout << "Flow " << i->first - 2 << " (" << t.sourceAddress << " -> " << t.destinationAddress << ")\n";
+        std::cout << "  Tx Packets: " << i->second.txPackets << "\n";
+        std::cout << "  Tx Bytes:   " << i->second.txBytes << "\n";
+        std::cout << "  TxOffered:  " << i->second.txBytes * 8.0 / 9.0 / 1000 / 1000  << " Mbps\n";
+        std::cout << "  Rx Packets: " << i->second.rxPackets << "\n";
+        std::cout << "  Rx Bytes:   " << i->second.rxBytes << "\n";
+        std::cout << "  Throughput: " << i->second.rxBytes * 8.0 / 9.0 / 1000 / 1000  << " Mbps\n";
+    }
+
     Simulator::Destroy ();
+    delete pAnim;
     return 0;
 }
 
@@ -138,31 +206,31 @@ void StartFlow (Ptr<Socket> localSocket,
                 Ipv4Address servAddress,
                 uint16_t servPort)
 {
-  NS_LOG_LOGIC ("Starting flow at time " <<  Simulator::Now ().GetSeconds ());
-  localSocket->Connect (InetSocketAddress (servAddress, servPort)); //connect
+    NS_LOG_LOGIC ("Starting flow at time " <<  Simulator::Now ().GetSeconds ());
+    localSocket->Connect (InetSocketAddress (servAddress, servPort)); //connect
 
-  // tell the tcp implementation to call WriteUntilBufferFull again
-  // if we blocked and new tx buffer space becomes available
-  localSocket->SetSendCallback (MakeCallback (&WriteUntilBufferFull));
-  WriteUntilBufferFull (localSocket, localSocket->GetTxAvailable ());
+    // tell the tcp implementation to call WriteUntilBufferFull again
+    // if we blocked and new tx buffer space becomes available
+    localSocket->SetSendCallback (MakeCallback (&WriteUntilBufferFull));
+    WriteUntilBufferFull (localSocket, localSocket->GetTxAvailable ());
 }
 
 void WriteUntilBufferFull (Ptr<Socket> localSocket, uint32_t txSpace)
 {
-  while (currentTxBytes < totalTxBytes && localSocket->GetTxAvailable () > 0) 
+    while (currentTxBytes < totalTxBytes && localSocket->GetTxAvailable () > 0) 
     {
-      uint32_t left = totalTxBytes - currentTxBytes;
-      uint32_t dataOffset = currentTxBytes % writeSize;
-      uint32_t toWrite = writeSize - dataOffset;
-      toWrite = std::min (toWrite, left);
-      toWrite = std::min (toWrite, localSocket->GetTxAvailable ());
-      int amountSent = localSocket->Send (&data[dataOffset], toWrite, 0);
-      if(amountSent < 0)
+        uint32_t left = totalTxBytes - currentTxBytes;
+        uint32_t dataOffset = currentTxBytes % writeSize;
+        uint32_t toWrite = writeSize - dataOffset;
+        toWrite = std::min (toWrite, left);
+        toWrite = std::min (toWrite, localSocket->GetTxAvailable ());
+        int amountSent = localSocket->Send (&data[dataOffset], toWrite, 0);
+        if(amountSent < 0)
         {
-          // we will be called again when new tx space becomes available.
-          return;
+            // we will be called again when new tx space becomes available.
+            return;
         }
-      currentTxBytes += amountSent;
+        currentTxBytes += amountSent;
     }
-  localSocket->Close ();
+    localSocket->Close ();
 }
