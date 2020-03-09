@@ -3,4 +3,7 @@
 
 def build(bld):
     obj = bld.create_ns3_program('myApp', 'point-to-point', 'applications', 'internet', 'flow-monitor', 'netanim')
-    obj.source = 'myApp.cc'
+    obj.source = [
+        'network_setup.cc',
+        'traffic_generator.cc'
+    ]

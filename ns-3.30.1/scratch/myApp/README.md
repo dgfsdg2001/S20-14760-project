@@ -1,24 +1,26 @@
-Config ns3 
+
+## Getting start
+### Config ns3
 ```shell
 ./waf clean
 ./waf configure --build-profile=optimized --enable-examples --enable-tests
 ./waf configure --build-profile=debug --enable-examples --enable-tests
 ```
 
-Build ns3
+# Build ns3
 ```shell
 ./waf
 ./waf --check-profile
 ```
 
-Build & Run myApp
+# Build & Run myApp
 https://www.nsnam.org/docs/manual/html/logging.html#logging
 ```shell
 NS_LOG="myApp" ./waf --run myApp
 NS_LOG="myApp:<ComponentName>" ./waf --run myApp # Enable InetSocketAddress log
 
-# These components may be useful:
-#   TcpSocketBase
+These components may be useful:
+1. TcpSocketBase
 ```
 TcpSocketBase
 +0.000000000s -1  [node 0] TcpSocketBase:AddOptions(0x55a3bfbc2960, 49153 > 50000 [SYN] Seq=0 Ack=0 Win=65535)
@@ -28,11 +30,12 @@ TcpSocketBase
 .....
 
 
-Run myApp with gdb
+### Run myApp with gdb
 ```shell
 ./waf --run myApp --command-template="gdb %s"
 ```
 
+### Result Analysis
 NetAnim
 https://www.nsnam.org/docs/models/html/animation.html
 
