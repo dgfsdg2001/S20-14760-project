@@ -16,8 +16,11 @@
 # Build & Run myApp
 https://www.nsnam.org/docs/manual/html/logging.html#logging
 ```shell
-NS_LOG="myApp" ./waf --run myApp
-NS_LOG="myApp:<ComponentName>" ./waf --run myApp # Enable InetSocketAddress log
+NS_LOG="myApp" ./waf --run "myApp" # default is TCP traffic
+NS_LOG="myApp" ./waf --run "myApp --isUdp=1"
+NS_LOG="myApp:<ComponentName>" ./waf --run "myApp" # Enable InetSocketAddress log
+
+```
 
 These components may be useful:
 1. TcpSocketBase

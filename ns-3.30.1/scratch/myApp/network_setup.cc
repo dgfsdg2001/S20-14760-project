@@ -30,8 +30,20 @@ using namespace ns3;
 AnimationInterface * pAnim = 0;
 
 NS_LOG_COMPONENT_DEFINE ("myApp");
+class Parameters {
+public:
+    Parameters(): isUdp(false) {}
+    bool isUdp;
+};
+
 
 int main(int argc, char** argv) {
+
+    Parameters params;
+    CommandLine cmd;
+    cmd.AddValue ("isUdp", "UDP if set to 1, TCP otherwise", params.isUdp);
+    cmd.Parse (argc, argv);
+
     // Here, we will create TOTAL_NODES for network topology
     NS_LOG_INFO ("Create nodes.");
     NodeContainer allNodes;
@@ -93,21 +105,36 @@ int main(int argc, char** argv) {
     //Turn on global static routing
     Ipv4GlobalRoutingHelper::PopulateRoutingTables ();
 
-    // Create a packet sink at server to receive packets
+    // Create UDP server application
     uint16_t tg_port = 33456;
+    UdpServerHelper serverUdp (tg_port);
+    ApplicationContainer appServerUdp =
+        serverUdp.Install (allNodes.Get(SERVER_NODE));
+    appServerUdp.Start (Seconds (START_SIMULATION_TIEM_SEC));
+    appServerUdp.Stop (Seconds (END_SIMULATION_TIME_SEC));
+
+    // Create TCP server application
     PacketSinkHelper pktSinkHelperServer ("ns3::TcpSocketFactory",
                          InetSocketAddress (Ipv4Address::GetAny (), tg_port));
-    ApplicationContainer appServer = pktSinkHelperServer
-                        .Install (allNodes.Get(SERVER_NODE));
-    appServer.Start (Seconds (START_SIMULATION_TIEM_SEC));
-    appServer.Stop (Seconds (END_SIMULATION_TIME_SEC));
+    ApplicationContainer appServerTcp = pktSinkHelperServer
+        .Install (allNodes.Get(SERVER_NODE));;
+    appServerTcp.Start (Seconds (START_SIMULATION_TIEM_SEC));
+    appServerTcp.Stop (Seconds (END_SIMULATION_TIME_SEC));
 
-    // Create client application to send packets
-    Ptr<Socket> ns3TcpSocket = Socket::CreateSocket (
+    // Create client socket and bind application to it.
+    Ptr<Socket> ns3Socket;
+    if (params.isUdp) {
+        std::cout << "Run UDP traffic" << std::endl;
+        ns3Socket = Socket::CreateSocket (
+            allNodes.Get(MOBILE_NODE), UdpSocketFactory::GetTypeId ());
+    } else {
+        std::cout << "Run TCP traffic" << std::endl;
+        ns3Socket = Socket::CreateSocket (
             allNodes.Get(MOBILE_NODE), TcpSocketFactory::GetTypeId ());
+    }
     Ptr<TrafficGenerator> appClient = CreateObject<TrafficGenerator> ();
     appClient->Setup (
-        ns3TcpSocket,
+        ns3Socket,
         InetSocketAddress (ipWifiServer.GetAddress (1), tg_port),
         1040,
         100,
