@@ -10,14 +10,6 @@
 #include "traffic-generator.h"
 
 using namespace ns3;
-//
-// Network topology (v0.1)
-//
-//        lteBaseStation 
-//        ,         `
-//  mobile          server
-//        `         , 
-//         wifiApNode 
 
 #define TOTAL_NODES 4
 #define MOBILE_NODE 0
@@ -91,7 +83,8 @@ int main(int argc, char** argv) {
     Ipv4AddressHelper ipv4;
 
     ipv4.SetBase ("10.1.2.0", "255.255.255.0");
-    
+    ipv4.Assign (devMobileWifi);
+
     ipv4.SetBase ("10.1.3.0", "255.255.255.0");
     ipv4.Assign (devMobileLte);
 
