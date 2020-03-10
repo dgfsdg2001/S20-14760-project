@@ -45,7 +45,7 @@ NS_LOG="myApp" ./waf --run "myApp --isUdp=1"
 
 # Enable log of InetSocketAddress
 # Notice that only logs are only printed under debug configuration.
-NS_LOG="myApp:<ComponentName>" ./waf --run "myApp"
+NS_LOG="myApp:myApp-tg:<ComponentName>" ./waf --run "myApp"
 
 # Run with gdb
 ./waf --run "myApp" --command-template="gdb %s"

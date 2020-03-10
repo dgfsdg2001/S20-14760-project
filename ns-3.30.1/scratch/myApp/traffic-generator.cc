@@ -1,5 +1,8 @@
 #include "traffic-generator.h"
 
+
+NS_LOG_COMPONENT_DEFINE ("myApp-tg");
+
 TrafficGenerator::TrafficGenerator ()
   : m_socket (0),
     m_peer (),
@@ -68,7 +71,10 @@ void
 TrafficGenerator::SendPacket (void) {
     for (uint32_t i = 0; i < m_burstPktNum; i += 1) {
         Ptr<Packet> packet = Create<Packet> (m_packetSize);
-        m_socket->Send (packet);
+        if (m_socket->Send (packet) == -1) {
+            NS_LOG_INFO("TxBuffer full, stop sending traffic");
+            break;
+        }
     }
     ScheduleTx ();
 }
