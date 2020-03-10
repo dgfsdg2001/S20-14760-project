@@ -45,7 +45,6 @@ std::pair<Ipv4Address, Ipv4Address> createCsmaNetwork(
     const Ptr<Node> n1, const Ptr<Node> n2,
     std::string network, std::string mask)
 {
-    NS_LOG_INFO ("Create CSMA network.");
     NodeContainer nodes(n1, n2);
     Ptr<CsmaChannel> channel = CreateObjectWithAttributes<CsmaChannel> (
       "DataRate", DataRateValue (DataRate (100*1000*1000)), //bps
@@ -54,6 +53,15 @@ std::pair<Ipv4Address, Ipv4Address> createCsmaNetwork(
     CsmaHelper csma;
     csma.SetDeviceAttribute ("EncapsulationMode", StringValue ("Llc"));
     NetDeviceContainer devs = csma.Install (nodes, channel);
+    
+    // Apply a error model to an uniform distribution 
+    Ptr<RateErrorModel> em1 =
+        CreateObjectWithAttributes<RateErrorModel> (
+        "ErrorRate", DoubleValue (0.01),
+        "ErrorUnit", EnumValue (RateErrorModel::ERROR_UNIT_PACKET)
+        );
+    devs.Get (0)->SetAttribute ("ReceiveErrorModel", PointerValue (em1));
+    devs.Get (1)->SetAttribute ("ReceiveErrorModel", PointerValue (em1));
 
     Ipv4AddressHelper ip;
     ip.SetBase (Ipv4Address(network.c_str()), Ipv4Mask(mask.c_str()));
@@ -66,7 +74,7 @@ std::pair<Ipv4Address, Ipv4Address> createWifiNetwork(
     const Ptr<Node> sta, const Ptr<Node> ap,
     std::string network, std::string mask)
 {
-    double distance = 10.0; //meter
+    double distance = 1.0; //meter
     double frequency = 5.0; // GHz
     uint8_t nStreams = 1;
 
@@ -164,24 +172,27 @@ int main(int argc, char** argv) {
     internet.Install (allNodes);
 
     // Create Network
-    NS_LOG_INFO ("Create Networks.");
+    NS_LOG_INFO ("Create CSMA network between Wi-Fi AP and server.");
     std::pair<Ipv4Address, Ipv4Address> ipsWiFiServer = createCsmaNetwork(
         params,
         allNodes.Get(NETWORK_NODE::WIFI_AP), allNodes.Get(NETWORK_NODE::SERVER_NODE),
         "10.2.1.0", "255.255.255.0");
 
+    NS_LOG_INFO ("Create CSMA network between LTE and server.");
     std::pair<Ipv4Address, Ipv4Address> ipsLteServer = createCsmaNetwork(
         params,
         allNodes.Get(NETWORK_NODE::LTE_BASESTATION), allNodes.Get(NETWORK_NODE::SERVER_NODE),
         "10.3.1.0", "255.255.255.0");
     UNUSED(ipsLteServer);
 
+    NS_LOG_INFO ("Create Wi-Fi network between mobile and Wi-Fi AP.");
     std::pair<Ipv4Address, Ipv4Address> ipsMobileWifi = createWifiNetwork(
         params,
         allNodes.Get(NETWORK_NODE::MOBILE), allNodes.Get(NETWORK_NODE::WIFI_AP),
         "10.1.2.0", "255.255.255.0");
     UNUSED(ipsMobileWifi);
 
+    NS_LOG_INFO ("Create point-2-point network between mobile and LTE.");
     PointToPointHelper p2p;
     p2p.SetDeviceAttribute ("DataRate", StringValue ("10Mbps"));
     p2p.SetChannelAttribute ("Delay", StringValue ("2ms"));
@@ -230,7 +241,7 @@ int main(int argc, char** argv) {
         ns3Socket,
         InetSocketAddress (ipsWiFiServer.second, tg_port),
         1040,
-        100,
+        3,
         0.1
     );
     allNodes.Get(NETWORK_NODE::MOBILE)->AddApplication(appClient);
