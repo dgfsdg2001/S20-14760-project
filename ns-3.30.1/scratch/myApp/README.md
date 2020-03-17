@@ -51,7 +51,7 @@ NS_LOG="myApp:myApp-tg:<ComponentName>" ./waf --run "myApp"
 ./waf --run "myApp" --command-template="gdb %s"
 ```
 
-These components may be useful for debugging:
+* These components may be useful for debugging:
 1. TcpSocketBase
 ```
 TcpSocketBase
@@ -63,6 +63,49 @@ TcpSocketBase
 ```
 
 ## Result Analysis
+### Flow Monitor
+https://www.nsnam.org/docs/models/html/flow-monitor.html
+
+* Statistical results are shown on the std output. 
+```
+Flow 1 (10.1.2.1 -> 10.2.1.2)
+  Tx Packets: 150
+  Tx Bytes:   160200
+  lostPackets:0
+  TxOffered:  0.1602 Mbps
+  Rx Packets: 143
+  Rx Bytes:   152724
+  Throughput: 0.152724 Mbps
+```
+
+* Or use `flowmon-parse-results.py` to get delay/jitter histogram
+```shell
+python3 ns-3.30.1/scratch/myApp/flowmon-parse-results.py myApp.flowmon.xml
+
+...
+Delay Histogram
+(0.0020-0.0030): 47
+(0.0040-0.0050): 40
+(0.0050-0.0060): 7
+(0.0060-0.0070): 16
+(0.0070-0.0080): 30
+(0.0220-0.0230): 1
+(0.0250-0.0260): 1
+(0.0270-0.0280): 1
+
+Jitter Histogram
+(0.0020-0.0030): 94
+(0.0030-0.0040): 2
+(0.0040-0.0050): 26
+(0.0050-0.0060): 19
+(0.0250-0.0260): 1
+```
+
+Delay: End-to-End delay for a received packet
+
+Jitter: Delay variation ([RFC3393](https://tools.ietf.org/html/rfc3393.html))
+
+
 ### NetAnim
 https://www.nsnam.org/docs/models/html/animation.html
 
