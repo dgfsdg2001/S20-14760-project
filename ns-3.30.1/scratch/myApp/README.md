@@ -16,10 +16,10 @@ mobile                 server
 The mobile device sends either UDP or TCP traffic to server through Wi-Fi connection.
 
 ## TODO
-1. All connection all uses point-to-point netDevice. There is no overhead from link 
-   layer and physical layer. Our plan is to user Wi-Fi and LTE model.
+1. Flow Monitor is designed for IP-based statistic. Our project needs application-based statistical results. Need to track packets in application
+module. Refer to ns-3.30.1/examples/stats/wifi-example-apps.cc
+2. Replace point-to-point to lte channel model for mobile-LteBaseStation.
 
-2. Add packet lost rate and latency for each network.
 
 ## Config ns3
 ```shell
@@ -51,8 +51,22 @@ NS_LOG="myApp:myApp-tg:<ComponentName>" ./waf --run "myApp"
 ./waf --run "myApp" --command-template="gdb %s"
 ```
 
+| Arguments        | Default   | 
+| -----------------|:---------:| 
+| startTime        | 0         |
+| endTime          | 5         |
+| isUdp            | 0         | 
+| packetSize       | 1040      | 
+| burstPktNum      | 3         | 
+| burstItvSec      | 0.1 sec   |
+| delayLteServer   | 2 ms      |
+| errateLteServer  | 1 %       |
+| delayWifiServer  | 2 ms      |
+| errateWifiServer | 1 %       |
+
+
 * These components may be useful for debugging:
-1. TcpSocketBase
+ - TcpSocketBase
 ```
 TcpSocketBase
 +0.000000000s -1  [node 0] TcpSocketBase:AddOptions(0x55a3bfbc2960, 49153 > 50000 [SYN] Seq=0 Ack=0 Win=65535)
@@ -63,8 +77,11 @@ TcpSocketBase
 ```
 
 ## Result Analysis
-### Flow Monitor
+### Flow Monitor (**IP-based**)
 https://www.nsnam.org/docs/models/html/flow-monitor.html
+
+**MPTCP locates at transportation layer. The IP-based statistical result is only for reference.**
+
 
 * Statistical results are shown on the std output. 
 ```

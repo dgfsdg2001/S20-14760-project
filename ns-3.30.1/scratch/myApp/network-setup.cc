@@ -26,8 +26,6 @@ enum NETWORK_NODE {
     TOAL_NODES = 4
 };
 
-#define START_SIMULATION_TIEM_SEC 0.0
-#define END_SIMULATION_TIME_SEC 5.0
 #define UNUSED(var) {var = var;}
 
 AnimationInterface *pAnim = 0;
@@ -35,20 +33,47 @@ AnimationInterface *pAnim = 0;
 NS_LOG_COMPONENT_DEFINE ("myApp");
 class Parameters {
 public:
-    Parameters(): isUdp(false) {}
+    double startTime;
+    double endTime;
+
+    //Traffic
     bool isUdp;
+    uint64_t packetSize;
+    uint64_t burstPktNum;
+    double burstItvSec;
+
+    // CSMA 
+    uint64_t delayLteServer;
+    uint64_t delayWifiServer;
+    uint64_t errateLteServer;  // uniform distribution
+    uint64_t errateWifiServer; // uniform distribution
+
+    Parameters() {
+        isUdp = false;
+        delayLteServer = 2;
+        delayWifiServer = 2;
+        errateLteServer = 1;
+        errateWifiServer = 1;
+        packetSize = 1040;
+        burstPktNum = 3;
+        burstItvSec = 0.1;
+        startTime = 0.0;
+        endTime = 5.0;
+    }
+
 };
 
 
 std::pair<Ipv4Address, Ipv4Address> createCsmaNetwork(
     const Parameters &params,
     const Ptr<Node> n1, const Ptr<Node> n2,
-    std::string network, std::string mask)
+    std::string network, std::string mask,
+    uint64_t delay, uint64_t error_rate)
 {
     NodeContainer nodes(n1, n2);
     Ptr<CsmaChannel> channel = CreateObjectWithAttributes<CsmaChannel> (
       "DataRate", DataRateValue (DataRate (100*1000*1000)), //bps
-      "Delay", TimeValue (MilliSeconds (2)));
+      "Delay", TimeValue (MilliSeconds (delay)));
 
     CsmaHelper csma;
     csma.SetDeviceAttribute ("EncapsulationMode", StringValue ("Llc"));
@@ -57,7 +82,7 @@ std::pair<Ipv4Address, Ipv4Address> createCsmaNetwork(
     // Apply a error model to an uniform distribution 
     Ptr<RateErrorModel> em1 =
         CreateObjectWithAttributes<RateErrorModel> (
-        "ErrorRate", DoubleValue (0.01),
+        "ErrorRate", DoubleValue (error_rate/100.0),
         "ErrorUnit", EnumValue (RateErrorModel::ERROR_UNIT_PACKET)
         );
     devs.Get (0)->SetAttribute ("ReceiveErrorModel", PointerValue (em1));
@@ -138,12 +163,54 @@ std::pair<Ipv4Address, Ipv4Address> createWifiNetwork(
     return std::make_pair(ipSta.GetAddress(0), ipAp.GetAddress(0));
 }
 
-int main(int argc, char** argv) {
-
+Parameters parseArgs(int argc, char** argv) {
     Parameters params;
     CommandLine cmd;
-    cmd.AddValue ("isUdp", "UDP if set to 1, TCP otherwise", params.isUdp);
+    cmd.AddValue ("startTime", "Time to start sending traffic",
+        params.startTime);
+    cmd.AddValue ("endTime", "Time to stop sending traffic",
+        params.endTime);
+    cmd.AddValue ("isUdp", "UDP if set to 1, TCP otherwise",
+        params.isUdp);
+    cmd.AddValue ("packetSize", "Size of Packet sent by traffic generator",
+        params.packetSize);
+    cmd.AddValue ("burstPktNum", "Number of packet sent by traffic generator at one burst",
+        params.burstPktNum);
+    cmd.AddValue ("burstItvSec", "Burst interval(sec) of traffic generator",
+        params.burstItvSec);
+    cmd.AddValue ("delayLteServer", "Delay(ms) between Lte and server",
+        params.delayLteServer);
+    cmd.AddValue ("delayWifiServer", "Delay(ms) between WiFi and server",
+        params.delayWifiServer);
+    cmd.AddValue ("errateLteServer", "Error rate between Lte and server [0 - 100]",
+        params.errateLteServer);
+    cmd.AddValue ("errateWifiServer", "Error rate between WiFi and server [0 - 100]",
+        params.errateWifiServer);
     cmd.Parse (argc, argv);
+
+    std::cout << "=========================================" << std::endl;
+    std::string protocol = (params.isUdp)? "UDP" : "TCP";
+    std::cout
+        << "Traffic (" << params.startTime << "-" << params.endTime << " sec)" << std::endl
+        << " - " << protocol << std::endl
+        << " - packate size: " << params.packetSize << std::endl 
+        << " - burst interval: " << params.burstItvSec*1000 << "ms" << std::endl
+        << " - burst packet number: " << params.burstPktNum << std::endl
+        << std::endl 
+        << "Lte-Server:" << std::endl
+        << " - delay: " <<  params.delayLteServer << "ms" << std::endl
+        << " - ErrorRate: " << params.errateLteServer << "%" << std::endl
+        << std::endl 
+        << "WiFi-Server:" << std::endl
+        << " - delay: " <<  params.delayWifiServer << "ms" << std::endl
+        << " - ErrorRate: " << params.errateWifiServer << "%" << std::endl;
+    std::cout << "=========================================\n" << std::endl;
+    return params;
+}
+
+int main(int argc, char** argv) {
+
+    Parameters params = parseArgs(argc, argv);
 
     // Here, we will create TOTAL_NODES for network topology
     NS_LOG_INFO ("Create nodes.");
@@ -176,13 +243,15 @@ int main(int argc, char** argv) {
     std::pair<Ipv4Address, Ipv4Address> ipsWiFiServer = createCsmaNetwork(
         params,
         allNodes.Get(NETWORK_NODE::WIFI_AP), allNodes.Get(NETWORK_NODE::SERVER_NODE),
-        "10.2.1.0", "255.255.255.0");
+        "10.2.1.0", "255.255.255.0",
+        params.delayWifiServer, params.errateWifiServer);
 
     NS_LOG_INFO ("Create CSMA network between LTE and server.");
     std::pair<Ipv4Address, Ipv4Address> ipsLteServer = createCsmaNetwork(
         params,
         allNodes.Get(NETWORK_NODE::LTE_BASESTATION), allNodes.Get(NETWORK_NODE::SERVER_NODE),
-        "10.3.1.0", "255.255.255.0");
+        "10.3.1.0", "255.255.255.0",
+        params.delayLteServer, params.errateLteServer);
     UNUSED(ipsLteServer);
 
     NS_LOG_INFO ("Create Wi-Fi network between mobile and Wi-Fi AP.");
@@ -214,25 +283,23 @@ int main(int argc, char** argv) {
     UdpServerHelper serverUdp (tg_port);
     ApplicationContainer appServerUdp =
         serverUdp.Install (allNodes.Get(SERVER_NODE));
-    appServerUdp.Start (Seconds (START_SIMULATION_TIEM_SEC));
-    appServerUdp.Stop (Seconds (END_SIMULATION_TIME_SEC));
+    appServerUdp.Start (Seconds (params.startTime));
+    appServerUdp.Stop (Seconds (params.endTime));
 
     // Create TCP server application
     PacketSinkHelper pktSinkHelperServer ("ns3::TcpSocketFactory",
                          InetSocketAddress (Ipv4Address::GetAny (), tg_port));
     ApplicationContainer appServerTcp = pktSinkHelperServer
         .Install (allNodes.Get(SERVER_NODE));;
-    appServerTcp.Start (Seconds (START_SIMULATION_TIEM_SEC));
-    appServerTcp.Stop (Seconds (END_SIMULATION_TIME_SEC));
+    appServerTcp.Start (Seconds (params.startTime));
+    appServerTcp.Stop (Seconds (params.endTime));
 
     // Create client socket and bind application to it.
     Ptr<Socket> ns3Socket;
     if (params.isUdp) {
-        std::cout << "Run UDP traffic" << std::endl;
         ns3Socket = Socket::CreateSocket (
             allNodes.Get(NETWORK_NODE::MOBILE), UdpSocketFactory::GetTypeId ());
     } else {
-        std::cout << "Run TCP traffic" << std::endl;
         ns3Socket = Socket::CreateSocket (
             allNodes.Get(NETWORK_NODE::MOBILE), TcpSocketFactory::GetTypeId ());
     }
@@ -240,13 +307,13 @@ int main(int argc, char** argv) {
     appClient->Setup (
         ns3Socket,
         InetSocketAddress (ipsWiFiServer.second, tg_port),
-        1040,
-        3,
-        0.1
+        params.packetSize,
+        params.burstPktNum,
+        params.burstItvSec
     );
     allNodes.Get(NETWORK_NODE::MOBILE)->AddApplication(appClient);
-    appClient->SetStartTime (Seconds (START_SIMULATION_TIEM_SEC));
-    appClient->SetStopTime (Seconds (END_SIMULATION_TIME_SEC));
+    appClient->SetStartTime (Seconds (params.startTime));
+    appClient->SetStopTime (Seconds (params.endTime));
 
     // [Shaomin] Maybe useful in future?
     //localSocket->SetAttribute("SndBufSize", UintegerValue(4096));
@@ -254,7 +321,7 @@ int main(int argc, char** argv) {
     // AsciiTraceHelper ascii;
     // p2p.EnableAsciiAll (ascii.CreateFileStream ("tcp-large-transfer.tr"));
     // p2p.EnablePcapAll ("tcp-large-transfer");
-    Simulator::Stop (Seconds (END_SIMULATION_TIME_SEC + 1));
+    Simulator::Stop (Seconds (params.endTime + 2));
 
     // Provide the absolute path to the resource
     // [Shaomin] Maybe useful in future
@@ -287,10 +354,9 @@ int main(int argc, char** argv) {
     for (std::map<FlowId, FlowMonitor::FlowStats>::const_iterator i = stats.begin (); i != stats.end (); ++i)
     {
         Ipv4FlowClassifier::FiveTuple t = classifier->FindFlow (i->first);
-        std::cout << "Flow " << i->first << " (" << t.sourceAddress << " -> " << t.destinationAddress << ")\n";
+        std::cout << "*IP* Flow " << i->first << " (" << t.sourceAddress << " -> " << t.destinationAddress << ")\n";
         std::cout << "  Tx Packets: " << i->second.txPackets << "\n";
         std::cout << "  Tx Bytes:   " << i->second.txBytes << "\n";
-        std::cout << "  lostPackets:" << i->second.lostPackets << "\n";
         std::cout << "  TxOffered:  " << i->second.txBytes * 1.0 / 1000 / 1000  << " Mbps\n";
         std::cout << "  Rx Packets: " << i->second.rxPackets << "\n";
         std::cout << "  Rx Bytes:   " << i->second.rxBytes << "\n";
