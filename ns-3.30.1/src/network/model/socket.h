@@ -252,6 +252,7 @@ public:
    *        is available to be read.
    */
   void SetRecvCallback (Callback<void, Ptr<Socket> >);
+  void SetRecvCallbackTCP (Callback<void, Ptr<Socket> >);
   /** 
    * \brief Allocate a local endpoint for this socket.
    * \param address the address to try to allocate
@@ -983,6 +984,8 @@ public:
    * \brief Leaves IPv6 multicast group this socket is joined to.
    */
   virtual void Ipv6LeaveGroup (void);
+
+  Callback<void, Ptr<Socket> >                   m_receivedDataTCP;      //!< data received callback
 
 protected:
   /**

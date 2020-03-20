@@ -357,6 +357,9 @@ TcpSocketBase::TcpSocketBase (const TcpSocketBase& sock)
   m_rxBuffer = CopyObject (sock.m_rxBuffer);
   m_tcb = CopyObject (sock.m_tcb);
 
+  NS_LOG_LOGIC ("Reserve receiveDataTCP cb:" << &(sock.m_receivedDataTCP));
+  m_receivedDataTCP = sock.m_receivedDataTCP;
+
   m_tcb->m_currentPacingRate = m_tcb->m_maxPacingRate;
   m_pacingTimer.SetFunction (&TcpSocketBase::NotifyPacingPerformed, this);
 
