@@ -11,9 +11,9 @@
 #include "ns3/netanim-module.h"
 #include "ns3/flow-monitor-helper.h"
 #include "ns3/ipv4-flow-classifier.h"
-#include "traffic-generator.h"
 #include "ns3/mobility-helper.h"
-
+#include "traffic-generator.h"
+#include "monitorApplication.h"
 #include <utility>
 
 using namespace ns3;
@@ -278,6 +278,7 @@ int main(int argc, char** argv) {
     NS_LOG_INFO ("Enable global static routing.");
     Ipv4GlobalRoutingHelper::PopulateRoutingTables ();
 
+#if 0
     // Create UDP server application
     uint16_t tg_port = 33456;
     UdpServerHelper serverUdp (tg_port);
@@ -314,6 +315,23 @@ int main(int argc, char** argv) {
     allNodes.Get(NETWORK_NODE::MOBILE)->AddApplication(appClient);
     appClient->SetStartTime (Seconds (params.startTime));
     appClient->SetStopTime (Seconds (params.endTime));
+#endif
+
+    UNUSED(ipsWiFiServer);
+
+    NS_LOG_INFO ("Create traffic source & sink.");
+    Ptr<Node> appSource = allNodes.Get(MOBILE);
+    Ptr<Sender> sender = CreateObject<Sender>();
+    appSource->AddApplication (sender);
+    sender->SetStartTime (Seconds (1));
+    sender->SetAttribute("Destination",  Ipv4AddressValue(ipsWiFiServer.second));
+    sender->SetAttribute("Port",  UintegerValue(33456));
+
+    Ptr<Node> appSink = allNodes.Get(SERVER_NODE);
+    Ptr<Receiver> receiver = CreateObject<Receiver>();
+    appSink->AddApplication (receiver);
+    receiver->SetStartTime (Seconds (0));
+    receiver->SetAttribute("Port",  UintegerValue(33456));
 
     // [Shaomin] Maybe useful in future?
     //localSocket->SetAttribute("SndBufSize", UintegerValue(4096));
