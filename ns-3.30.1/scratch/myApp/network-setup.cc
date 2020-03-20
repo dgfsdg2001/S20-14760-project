@@ -26,18 +26,16 @@ enum NETWORK_NODE {
     TOAL_NODES = 4
 };
 
-#define UNUSED(var) {var = var;}
 
 AnimationInterface *pAnim = 0;
 
 NS_LOG_COMPONENT_DEFINE ("myApp");
 class Parameters {
 public:
-    double startTime;
     double endTime;
 
     //Traffic
-    bool isUdp;
+    uint16_t UseTCP;
     uint64_t packetSize;
     uint64_t burstPktNum;
     double burstItvSec;
@@ -49,16 +47,15 @@ public:
     uint64_t errateWifiServer; // uniform distribution
 
     Parameters() {
-        isUdp = false;
+        UseTCP = 0;
         delayLteServer = 2;
         delayWifiServer = 2;
         errateLteServer = 1;
         errateWifiServer = 1;
-        packetSize = 1040;
-        burstPktNum = 3;
-        burstItvSec = 0.1;
-        startTime = 0.0;
-        endTime = 5.0;
+        packetSize = 1464;
+        burstPktNum = 1;
+        burstItvSec = 0.5;
+        endTime = 6.0;
     }
 
 };
@@ -166,12 +163,10 @@ std::pair<Ipv4Address, Ipv4Address> createWifiNetwork(
 Parameters parseArgs(int argc, char** argv) {
     Parameters params;
     CommandLine cmd;
-    cmd.AddValue ("startTime", "Time to start sending traffic",
-        params.startTime);
     cmd.AddValue ("endTime", "Time to stop sending traffic",
         params.endTime);
-    cmd.AddValue ("isUdp", "UDP if set to 1, TCP otherwise",
-        params.isUdp);
+    cmd.AddValue ("UseTCP", "1 for TCP, 0 for UDP",
+        params.UseTCP);
     cmd.AddValue ("packetSize", "Size of Packet sent by traffic generator",
         params.packetSize);
     cmd.AddValue ("burstPktNum", "Number of packet sent by traffic generator at one burst",
@@ -189,9 +184,9 @@ Parameters parseArgs(int argc, char** argv) {
     cmd.Parse (argc, argv);
 
     std::cout << "=========================================" << std::endl;
-    std::string protocol = (params.isUdp)? "UDP" : "TCP";
+    std::string protocol = (params.UseTCP)? "TCP" : "UDP";
     std::cout
-        << "Traffic (" << params.startTime << "-" << params.endTime << " sec)" << std::endl
+        << "Traffic (" << 1 << "-" << params.endTime << " sec)" << std::endl
         << " - " << protocol << std::endl
         << " - packate size: " << params.packetSize << std::endl 
         << " - burst interval: " << params.burstItvSec*1000 << "ms" << std::endl
@@ -205,6 +200,12 @@ Parameters parseArgs(int argc, char** argv) {
         << " - delay: " <<  params.delayWifiServer << "ms" << std::endl
         << " - ErrorRate: " << params.errateWifiServer << "%" << std::endl;
     std::cout << "=========================================\n" << std::endl;
+
+    if (params.packetSize > 1464) {
+        std::cerr << "Packet size including TCP/IP header (36) should not exceed MTU of CSMA(1500)" << std::endl;
+        exit(-1);
+    }
+
     return params;
 }
 
@@ -252,14 +253,14 @@ int main(int argc, char** argv) {
         allNodes.Get(NETWORK_NODE::LTE_BASESTATION), allNodes.Get(NETWORK_NODE::SERVER_NODE),
         "10.3.1.0", "255.255.255.0",
         params.delayLteServer, params.errateLteServer);
-    UNUSED(ipsLteServer);
+    NS_UNUSED(ipsLteServer);
 
     NS_LOG_INFO ("Create Wi-Fi network between mobile and Wi-Fi AP.");
     std::pair<Ipv4Address, Ipv4Address> ipsMobileWifi = createWifiNetwork(
         params,
         allNodes.Get(NETWORK_NODE::MOBILE), allNodes.Get(NETWORK_NODE::WIFI_AP),
         "10.1.2.0", "255.255.255.0");
-    UNUSED(ipsMobileWifi);
+    NS_UNUSED(ipsMobileWifi);
 
     NS_LOG_INFO ("Create point-2-point network between mobile and LTE.");
     PointToPointHelper p2p;
@@ -278,60 +279,28 @@ int main(int argc, char** argv) {
     NS_LOG_INFO ("Enable global static routing.");
     Ipv4GlobalRoutingHelper::PopulateRoutingTables ();
 
-#if 0
-    // Create UDP server application
-    uint16_t tg_port = 33456;
-    UdpServerHelper serverUdp (tg_port);
-    ApplicationContainer appServerUdp =
-        serverUdp.Install (allNodes.Get(SERVER_NODE));
-    appServerUdp.Start (Seconds (params.startTime));
-    appServerUdp.Stop (Seconds (params.endTime));
-
-    // Create TCP server application
-    PacketSinkHelper pktSinkHelperServer ("ns3::TcpSocketFactory",
-                         InetSocketAddress (Ipv4Address::GetAny (), tg_port));
-    ApplicationContainer appServerTcp = pktSinkHelperServer
-        .Install (allNodes.Get(SERVER_NODE));;
-    appServerTcp.Start (Seconds (params.startTime));
-    appServerTcp.Stop (Seconds (params.endTime));
-
-    // Create client socket and bind application to it.
-    Ptr<Socket> ns3Socket;
-    if (params.isUdp) {
-        ns3Socket = Socket::CreateSocket (
-            allNodes.Get(NETWORK_NODE::MOBILE), UdpSocketFactory::GetTypeId ());
-    } else {
-        ns3Socket = Socket::CreateSocket (
-            allNodes.Get(NETWORK_NODE::MOBILE), TcpSocketFactory::GetTypeId ());
-    }
-    Ptr<TrafficGenerator> appClient = CreateObject<TrafficGenerator> ();
-    appClient->Setup (
-        ns3Socket,
-        InetSocketAddress (ipsWiFiServer.second, tg_port),
-        params.packetSize,
-        params.burstPktNum,
-        params.burstItvSec
-    );
-    allNodes.Get(NETWORK_NODE::MOBILE)->AddApplication(appClient);
-    appClient->SetStartTime (Seconds (params.startTime));
-    appClient->SetStopTime (Seconds (params.endTime));
-#endif
-
-    UNUSED(ipsWiFiServer);
 
     NS_LOG_INFO ("Create traffic source & sink.");
     Ptr<Node> appSource = allNodes.Get(MOBILE);
     Ptr<Sender> sender = CreateObject<Sender>();
     appSource->AddApplication (sender);
     sender->SetStartTime (Seconds (1));
+    sender->SetStopTime(Seconds (params.endTime));
     sender->SetAttribute("Destination",  Ipv4AddressValue(ipsWiFiServer.second));
-    sender->SetAttribute("Port",  UintegerValue(33456));
+    sender->SetAttribute("UseTCP",  UintegerValue(params.UseTCP));
+    sender->SetAttribute("PacketSize",  UintegerValue(params.packetSize));
+    sender->SetAttribute("PacketNum",  UintegerValue(params.burstPktNum));
+    std::stringstream ss;
+    ss << "ns3::ConstantRandomVariable[Constant=" << params.burstItvSec << "]"; 
+    std::cout << ss.str() << std::endl;
+    //sender->SetAttribute("Interval", StringValue(ss.str()));
 
     Ptr<Node> appSink = allNodes.Get(SERVER_NODE);
     Ptr<Receiver> receiver = CreateObject<Receiver>();
     appSink->AddApplication (receiver);
-    receiver->SetStartTime (Seconds (0));
-    receiver->SetAttribute("Port",  UintegerValue(33456));
+    receiver->SetStartTime (Seconds (1));
+    receiver->SetStopTime(Seconds (params.endTime));
+    receiver->SetAttribute("UseTCP",  UintegerValue(params.UseTCP));
 
     // [Shaomin] Maybe useful in future?
     //localSocket->SetAttribute("SndBufSize", UintegerValue(4096));
@@ -339,7 +308,7 @@ int main(int argc, char** argv) {
     // AsciiTraceHelper ascii;
     // p2p.EnableAsciiAll (ascii.CreateFileStream ("tcp-large-transfer.tr"));
     // p2p.EnablePcapAll ("tcp-large-transfer");
-    Simulator::Stop (Seconds (params.endTime + 2));
+    Simulator::Stop (Seconds (params.endTime + 1));
 
     // Provide the absolute path to the resource
     // [Shaomin] Maybe useful in future

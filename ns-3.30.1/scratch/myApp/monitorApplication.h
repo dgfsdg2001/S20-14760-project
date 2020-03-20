@@ -11,11 +11,10 @@ using namespace ns3;
 
 
 struct PAYLOAD {
-    uint64_t size;
+    uint32_t size;
     uint64_t app_sn;
     int64_t timestamp_ns;
 };
-
 
 //----------------------------------------------------------------------
 //-- Sender
@@ -36,6 +35,7 @@ private:
   void SendPacket ();
 
   uint32_t        m_pktSize;
+  uint32_t        m_pktNum;
   Ipv4Address     m_destAddr;
   uint32_t        m_destPort;
   Ptr<ConstantRandomVariable> m_interval;
@@ -80,6 +80,7 @@ private:
   Ptr<TimeMinMaxAvgTotalCalculator> m_delay;
 
   uint8_t         m_useTCP;
+  uint32_t        m_segBytes;
 };
 
 #endif // _MONITOR_APPLICATION_H_

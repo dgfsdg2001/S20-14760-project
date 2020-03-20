@@ -9,6 +9,8 @@ using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE ("myApp-mon");
 
+const uint64_t default_port = 33456;
+
 //----------------------------------------------------------------------
 //-- Sender
 //----------------------------------------------------------------------
@@ -22,12 +24,16 @@ Sender::GetTypeId (void)
                    UintegerValue (100),
                    MakeUintegerAccessor (&Sender::m_pktSize),
                    MakeUintegerChecker<uint32_t>(sizeof(payload_temp)))
+    .AddAttribute ("PacketNum", "The number of packets sent per interval.",
+                   UintegerValue (1),
+                   MakeUintegerAccessor (&Sender::m_pktNum),
+                   MakeUintegerChecker<uint32_t>(1))
     .AddAttribute ("Destination", "Target host address.",
                    Ipv4AddressValue ("255.255.255.255"),
                    MakeIpv4AddressAccessor (&Sender::m_destAddr),
                    MakeIpv4AddressChecker ())
     .AddAttribute ("Port", "Destination app port.",
-                   UintegerValue (1603),
+                   UintegerValue (default_port),
                    MakeUintegerAccessor (&Sender::m_destPort),
                    MakeUintegerChecker<uint32_t>())
     .AddAttribute ("Interval", "Delay between transmissions.",
@@ -108,16 +114,19 @@ void Sender::StopApplication ()
 void Sender::SendPacket ()
 { 
   NS_LOG_INFO ("Sending packet at " << Simulator::Now () << " to " << m_destAddr);
-  payload_temp.app_sn += 1;
-  payload_temp.timestamp_ns = Simulator::Now ().GetNanoSeconds();
-  memccpy(m_buf, &payload_temp, sizeof(payload_temp), m_pktSize);
-  Ptr<Packet> packet = Create<Packet>(m_buf, m_pktSize);
-  if (m_useTCP)
-      m_socket->Send(packet);
-  else
-      m_socket->SendTo (packet, 0, InetSocketAddress (m_destAddr, m_destPort));
-  
-  m_txTrace (packet);
+
+  for (uint32_t i = 0; i < m_pktNum; i += 1) {
+    payload_temp.app_sn += 1;
+    payload_temp.timestamp_ns = Simulator::Now ().GetNanoSeconds();
+    memccpy(m_buf, &payload_temp, sizeof(payload_temp), m_pktSize);
+    Ptr<Packet> packet = Create<Packet>(m_buf, m_pktSize);
+    if (m_useTCP)
+        m_socket->Send(packet);
+    else
+        m_socket->SendTo (packet, 0, InetSocketAddress (m_destAddr, m_destPort));
+    
+    m_txTrace (packet);
+  }
   m_sendEvent = Simulator::Schedule (Seconds (m_interval->GetValue ()),
                                      &Sender::SendPacket, this);
 }
@@ -133,7 +142,7 @@ Receiver::GetTypeId (void)
     .SetParent<Application> ()
     .AddConstructor<Receiver> ()
     .AddAttribute ("Port", "Listening port.",
-                   UintegerValue (1603),
+                   UintegerValue (default_port),
                    MakeUintegerAccessor (&Receiver::m_port),
                    MakeUintegerChecker<uint32_t>())
     .AddAttribute ("UseTCP", "true for TCP, false for UDP",
@@ -179,6 +188,8 @@ Receiver::StartApplication ()
           m_socket->Listen ();
       }
   }
+  m_segBytes = 0;  
+
   m_socket->SetRecvCallback (MakeCallback (&Receiver::Receive, this));
   m_socket->SetRecvCallbackTCP (MakeCallback (&Receiver::Receive, this));
 }
@@ -204,6 +215,9 @@ Receiver::SetDelayTracker (Ptr<TimeMinMaxAvgTotalCalculator> delay)
   m_delay = delay;
 }
 
+# include <unistd.h>
+#include <memory>
+
 void
 Receiver::Receive (Ptr<Socket> socket)
 {
@@ -216,16 +230,36 @@ Receiver::Receive (Ptr<Socket> socket)
       }
 
       uint8_t *buffer = new uint8_t[packet->GetSize ()];
+      uint8_t *ptr = buffer;
       uint32_t size = packet->CopyData(buffer, packet->GetSize ());
-      while (size) {
-          struct PAYLOAD *payload =  reinterpret_cast<PAYLOAD *>(buffer);
-          std::cout << size << "," << payload->app_sn << std::endl;
-          size -= payload->size;
-          buffer += payload->size;
+      
+      // Packet might be segmented into one sockets or multiple sockets.
+      if (m_segBytes >= size) {
+          m_segBytes -= size;
+          size = 0;
+      } else {
+          size -= m_segBytes;
+          ptr += m_segBytes;
       }
+      while (size > 0) {
+          
+          struct PAYLOAD *payload =  reinterpret_cast<PAYLOAD *>(ptr);
+          std::cout << size << "," << payload->app_sn << std::endl;
 
+          m_segBytes = payload->size;
+          if (m_segBytes <= size) {
+              size -= m_segBytes;
+              ptr += m_segBytes;
+              m_segBytes = 0;
+          } else {
+              m_segBytes -= size;
+              size = 0;
+          }
+      }
       if (m_calc != 0) {
           m_calc->Update ();
       }
+
+      delete [] buffer;
   }
 }

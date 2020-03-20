@@ -37,44 +37,31 @@ module. Refer to ns-3.30.1/examples/stats/wifi-example-apps.cc
 ## Build & Run myApp
 https://www.nsnam.org/docs/manual/html/logging.html#logging
 ```shell
-# Run TCP traffic
+# Run UDP traffic
 NS_LOG="myApp" ./waf --run "myApp"
 
-# Run UDP traffic
-NS_LOG="myApp" ./waf --run "myApp --isUdp=1"
+# Run TCP traffic
+NS_LOG="myApp" ./waf --run "myApp -- UseTCP=1"
 
-# Enable log of InetSocketAddress
-# Notice that only logs are only printed under debug configuration.
-NS_LOG="myApp:myApp-tg:<ComponentName>" ./waf --run "myApp"
-
-# Run with gdb
-./waf --run "myApp" --command-template="gdb %s"
+NS_LOG="myApp:myApp-tg:myApp-mon<ComponentName>" ./waf --run "myApp --<arguments>=<value>"
 ```
 
 | Arguments        | Default   | 
 | -----------------|:---------:| 
-| startTime        | 0         |
-| endTime          | 5         |
-| isUdp            | 0         | 
-| packetSize       | 1040      | 
-| burstPktNum      | 3         | 
-| burstItvSec      | 0.1 sec   |
+| endTime          | 6         |
+| UseTCP           | 0         | 
+| packetSize       | 1464      | (MTU of CSMA) 
+| burstPktNum      | 1         | 
+| burstItvSec      | 0.5 sec   |
 | delayLteServer   | 2 ms      |
 | errateLteServer  | 1 %       |
 | delayWifiServer  | 2 ms      |
 | errateWifiServer | 1 %       |
 
 
-* These components may be useful for debugging:
- - TcpSocketBase
-```
-TcpSocketBase
-+0.000000000s -1  [node 0] TcpSocketBase:AddOptions(0x55a3bfbc2960, 49153 > 50000 [SYN] Seq=0 Ack=0 Win=65535)
-+0.000000000s -1  [node 0] TcpSocketBase:Send(): [LOGIC] txBufSize=131040 state SYN_SENT
-+0.000000000s 3  [node 3] TcpSocketBase:Listen(): [DEBUG] CLOSED -> LISTEN
-+3.004160000s 0  [node 0] TcpSocketBase:DoForwardUp(): [LOGIC] At state SYN_SENT received packet of seq [0:0) without TS option. Silently discard it
-.....
-```
+* Enabling these components log is helpful for debugging:
+ - TcpSocketBase, Socket
+
 
 ## Result Analysis
 ### Flow Monitor (**IP-based**)
@@ -151,3 +138,6 @@ appClient->Setup (
     0.05   // Burst interval in seocnd
 );
 ```
+
+## Knwon Problems
+1. TCP aggreates data, including the retransmissions, as many as possile into one signle socket to transmit. It only bounds with SegmentSize (536). In contrast, UDP does not aggregrate its data.
