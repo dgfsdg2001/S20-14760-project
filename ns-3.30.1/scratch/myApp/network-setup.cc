@@ -12,8 +12,8 @@
 #include "ns3/flow-monitor-helper.h"
 #include "ns3/ipv4-flow-classifier.h"
 #include "ns3/mobility-helper.h"
-#include "traffic-generator.h"
 #include "monitorApplication.h"
+#include "myJson.h"
 #include <utility>
 
 using namespace ns3;
@@ -30,36 +30,6 @@ enum NETWORK_NODE {
 AnimationInterface *pAnim = 0;
 
 NS_LOG_COMPONENT_DEFINE ("myApp");
-class Parameters {
-public:
-    double endTime;
-
-    //Traffic
-    uint16_t UseTCP;
-    uint64_t packetSize;
-    uint64_t burstPktNum;
-    double burstItvSec;
-
-    // CSMA 
-    uint64_t delayLteServer;
-    uint64_t delayWifiServer;
-    uint64_t errateLteServer;  // uniform distribution
-    uint64_t errateWifiServer; // uniform distribution
-
-    Parameters() {
-        UseTCP = 0;
-        delayLteServer = 2;
-        delayWifiServer = 2;
-        errateLteServer = 1;
-        errateWifiServer = 1;
-        packetSize = 1464;
-        burstPktNum = 1;
-        burstItvSec = 0.5;
-        endTime = 6.0;
-    }
-
-};
-
 
 std::pair<Ipv4Address, Ipv4Address> createCsmaNetwork(
     const Parameters &params,
@@ -160,58 +130,9 @@ std::pair<Ipv4Address, Ipv4Address> createWifiNetwork(
     return std::make_pair(ipSta.GetAddress(0), ipAp.GetAddress(0));
 }
 
-Parameters parseArgs(int argc, char** argv) {
-    Parameters params;
-    CommandLine cmd;
-    cmd.AddValue ("endTime", "Time to stop sending traffic",
-        params.endTime);
-    cmd.AddValue ("UseTCP", "1 for TCP, 0 for UDP",
-        params.UseTCP);
-    cmd.AddValue ("packetSize", "Size of Packet sent by traffic generator",
-        params.packetSize);
-    cmd.AddValue ("burstPktNum", "Number of packet sent by traffic generator at one burst",
-        params.burstPktNum);
-    cmd.AddValue ("burstItvSec", "Burst interval(sec) of traffic generator",
-        params.burstItvSec);
-    cmd.AddValue ("delayLteServer", "Delay(ms) between Lte and server",
-        params.delayLteServer);
-    cmd.AddValue ("delayWifiServer", "Delay(ms) between WiFi and server",
-        params.delayWifiServer);
-    cmd.AddValue ("errateLteServer", "Error rate between Lte and server [0 - 100]",
-        params.errateLteServer);
-    cmd.AddValue ("errateWifiServer", "Error rate between WiFi and server [0 - 100]",
-        params.errateWifiServer);
-    cmd.Parse (argc, argv);
-
-    std::cout << "=========================================" << std::endl;
-    std::string protocol = (params.UseTCP)? "TCP" : "UDP";
-    std::cout
-        << "Traffic (" << 1 << "-" << params.endTime << " sec)" << std::endl
-        << " - " << protocol << std::endl
-        << " - packate size: " << params.packetSize << std::endl 
-        << " - burst interval: " << params.burstItvSec*1000 << "ms" << std::endl
-        << " - burst packet number: " << params.burstPktNum << std::endl
-        << std::endl 
-        << "Lte-Server:" << std::endl
-        << " - delay: " <<  params.delayLteServer << "ms" << std::endl
-        << " - ErrorRate: " << params.errateLteServer << "%" << std::endl
-        << std::endl 
-        << "WiFi-Server:" << std::endl
-        << " - delay: " <<  params.delayWifiServer << "ms" << std::endl
-        << " - ErrorRate: " << params.errateWifiServer << "%" << std::endl;
-    std::cout << "=========================================\n" << std::endl;
-
-    if (params.packetSize > 1464) {
-        std::cerr << "Packet size including TCP/IP header (36) should not exceed MTU of CSMA(1500)" << std::endl;
-        exit(-1);
-    }
-
-    return params;
-}
-
 int main(int argc, char** argv) {
 
-    Parameters params = parseArgs(argc, argv);
+    Parameters params = parseArgsToParams(argc, argv);
 
     // Here, we will create TOTAL_NODES for network topology
     NS_LOG_INFO ("Create nodes.");
@@ -291,9 +212,10 @@ int main(int argc, char** argv) {
     sender->SetAttribute("PacketSize",  UintegerValue(params.packetSize));
     sender->SetAttribute("PacketNum",  UintegerValue(params.burstPktNum));
     std::stringstream ss;
+    
     ss << "ns3::ConstantRandomVariable[Constant=" << params.burstItvSec << "]"; 
-    std::cout << ss.str() << std::endl;
-    //sender->SetAttribute("Interval", StringValue(ss.str()));
+
+    sender->SetAttribute("Interval", StringValue(ss.str()));
 
     Ptr<Node> appSink = allNodes.Get(SERVER_NODE);
     Ptr<Receiver> receiver = CreateObject<Receiver>();
@@ -308,7 +230,7 @@ int main(int argc, char** argv) {
     // AsciiTraceHelper ascii;
     // p2p.EnableAsciiAll (ascii.CreateFileStream ("tcp-large-transfer.tr"));
     // p2p.EnablePcapAll ("tcp-large-transfer");
-    Simulator::Stop (Seconds (params.endTime + 1));
+    Simulator::Stop (Seconds (params.endTime + 5));
 
     // Provide the absolute path to the resource
     // [Shaomin] Maybe useful in future
@@ -326,14 +248,14 @@ int main(int argc, char** argv) {
     // g.PrintRoutingTableAllAt (Seconds (0), routingStream);
 
     Simulator::Run ();
-    std::cout << "Animation Trace file created:"
-                << "myApp.xml" << std::endl;
+    std::cout << "Animation Trace file created:" << "myApp.xml" << std::endl;
 
     // Save FlowMonitor results to file
+    std::cout << "Statistical results file created:" << "myApp.flowmon.xml" << std::endl;
     flowmonHelper.SerializeToXmlFile ("myApp.flowmon.xml", true, true);
-    std::cout << "Statistical results file created:"
-                << "myApp.flowmon.xml" << std::endl << std::endl;
+    
 
+#if 0 // Not necessary
     // Print per flow statistics
     monitor->CheckForLostPackets ();
     Ptr<Ipv4FlowClassifier> classifier = DynamicCast<Ipv4FlowClassifier> (flowmonHelper.GetClassifier ());
@@ -349,6 +271,15 @@ int main(int argc, char** argv) {
         std::cout << "  Rx Bytes:   " << i->second.rxBytes << "\n";
         std::cout << "  Throughput: " << i->second.rxBytes * 1.0 / 1000 / 1000  << " Mbps\n";
     }
+#endif
+
+    std::cout << "Ooutput simulation results to myApp.appStats.json" << std::endl;
+    std::ofstream os ("myApp.appStats.json", std::ios::out|std::ios::binary);
+    jsonObjStart(os);
+    jsonObjAdd(os, "params", parmsToJSONObj());
+    jsonObjAdd(os, "stats", monStatsToJSONObj());
+    jsonObjEnd(os);
+    os.close();
 
     Simulator::Destroy ();
     delete pAnim;

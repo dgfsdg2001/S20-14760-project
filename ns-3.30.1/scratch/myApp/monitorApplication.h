@@ -4,8 +4,8 @@
 #include "ns3/core-module.h"
 #include "ns3/network-module.h"
 #include "ns3/application.h"
-
 #include "ns3/stats-module.h"
+#include "network-params.h"
 
 using namespace ns3;
 
@@ -13,7 +13,7 @@ using namespace ns3;
 struct PAYLOAD {
     uint32_t size;
     uint64_t app_sn;
-    int64_t timestamp_ns;
+    int64_t timestamp_ms;
 };
 
 //----------------------------------------------------------------------
@@ -82,5 +82,7 @@ private:
   uint8_t         m_useTCP;
   uint32_t        m_segBytes;
 };
+
+std::string monStatsToJSONObj();
 
 #endif // _MONITOR_APPLICATION_H_

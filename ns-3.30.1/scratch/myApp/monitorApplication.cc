@@ -2,14 +2,28 @@
 #include "ns3/network-module.h"
 #include "ns3/internet-module.h"
 #include "ns3/stats-module.h"
-
 #include "monitorApplication.h"
+#include "myJson.h"
+#include <map>
+#include <utility>
 
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE ("myApp-mon");
 
 const uint64_t default_port = 33456;
+
+class STAT {
+public:
+  uint64_t pktSize;
+  uint64_t sentPkts;
+  uint64_t recvPkts;
+  uint64_t firstPktTxTimeMs;
+  uint64_t lastPktTxTimeMs;
+  std::map<uint64_t, std::pair<uint64_t, uint64_t>> pktTxRxTimeMs;
+};
+STAT gStats;
+
 
 //----------------------------------------------------------------------
 //-- Sender
@@ -99,6 +113,9 @@ void Sender::StartApplication ()
   payload_temp.app_sn = 0;
   payload_temp.size = m_pktSize;
 
+  // Update to the statistical monitor
+  gStats.pktSize = m_pktSize;
+
   Simulator::Cancel (m_sendEvent);
   m_sendEvent = Simulator::ScheduleNow (&Sender::SendPacket, this);
 }
@@ -117,7 +134,17 @@ void Sender::SendPacket ()
 
   for (uint32_t i = 0; i < m_pktNum; i += 1) {
     payload_temp.app_sn += 1;
-    payload_temp.timestamp_ns = Simulator::Now ().GetNanoSeconds();
+    payload_temp.timestamp_ms = Simulator::Now ().GetMilliSeconds();
+
+    // Update to the statistical monitor 
+    gStats.sentPkts += 1;
+    gStats.lastPktTxTimeMs = payload_temp.timestamp_ms;
+    if (gStats.pktTxRxTimeMs.empty())
+      gStats.firstPktTxTimeMs = payload_temp.timestamp_ms;
+    gStats.pktTxRxTimeMs[payload_temp.app_sn] = 
+      std::make_pair<uint64_t, uint64_t>(payload_temp.timestamp_ms, 0);
+
+
     memccpy(m_buf, &payload_temp, sizeof(payload_temp), m_pktSize);
     Ptr<Packet> packet = Create<Packet>(m_buf, m_pktSize);
     if (m_useTCP)
@@ -215,14 +242,14 @@ Receiver::SetDelayTracker (Ptr<TimeMinMaxAvgTotalCalculator> delay)
   m_delay = delay;
 }
 
-# include <unistd.h>
-#include <memory>
 
 void
 Receiver::Receive (Ptr<Socket> socket)
 {
   Ptr<Packet> packet;
   Address from;
+  uint64_t now = Simulator::Now ().GetMilliSeconds();
+
   while ((packet = socket->RecvFrom (from))) {
       if (InetSocketAddress::IsMatchingType (from)) {
           NS_LOG_INFO ("Received " << packet->GetSize () << " bytes from " <<
@@ -244,7 +271,14 @@ Receiver::Receive (Ptr<Socket> socket)
       while (size > 0) {
           
           struct PAYLOAD *payload =  reinterpret_cast<PAYLOAD *>(ptr);
-          std::cout << size << "," << payload->app_sn << std::endl;
+
+          // Update to the statistical monitor
+          gStats.recvPkts += 1;
+          if (gStats.pktTxRxTimeMs.find(payload->app_sn) != gStats.pktTxRxTimeMs.end())
+            gStats.pktTxRxTimeMs[payload->app_sn].second = now;
+          else {
+            NS_LOG_ERROR ("Suspicious SN " + std::to_string(payload->app_sn));
+          }
 
           m_segBytes = payload->size;
           if (m_segBytes <= size) {
@@ -262,4 +296,38 @@ Receiver::Receive (Ptr<Socket> socket)
 
       delete [] buffer;
   }
+}
+
+
+std::string monStatsDelaysToJSONArray() {
+  std::stringstream ss;
+  jsonArrayStart(ss);
+  for (auto it = gStats.pktTxRxTimeMs.cbegin(); it != gStats.pktTxRxTimeMs.cend(); it++) {
+      std::pair<uint64_t, uint64_t> p = (*it).second;
+      std::stringstream arr;
+      jsonObjStart(arr);
+      jsonObjAdd(arr, "sn", (*it).first);
+      jsonObjAdd(arr, "TxTime", p.first/1000.0);
+      if (p.second >= p.first)
+        jsonObjAdd(arr, "RxTime", p.second/1000.0);
+      else
+        jsonObjAdd(arr, "RxTime", "null");
+      jsonObjEnd(arr);
+      jsonArrayAdd(ss, arr.str());
+  }
+  jsonArrayEnd(ss);
+  return ss.str();
+}
+
+
+std::string monStatsToJSONObj() {
+    std::stringstream ss;
+    jsonObjStart(ss);
+    jsonObjAdd(ss, "PktSize", gStats.pktSize);
+    jsonObjAdd(ss, "TxPktCnt", gStats.sentPkts);
+    jsonObjAdd(ss, "RxPktCnt",gStats.recvPkts);
+    jsonObjAdd(ss, "TxTime", (gStats.lastPktTxTimeMs - gStats.firstPktTxTimeMs)/1000.0);
+    jsonObjAdd(ss, "Latency", monStatsDelaysToJSONArray());
+    jsonObjEnd(ss);
+    return ss.str();
 }
