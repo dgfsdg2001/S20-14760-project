@@ -1,0 +1,4 @@
+pandas
+numpy
+dirtyjson >= 1.0.7
+matplotlib >= 3.2.1

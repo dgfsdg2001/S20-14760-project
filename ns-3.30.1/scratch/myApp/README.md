@@ -64,6 +64,12 @@ NS_LOG="myApp:myApp-tg:myApp-mon<ComponentName>" ./waf --run "myApp --<arguments
 
 
 ## Result Analysis
+### App-based statistic
+```shell
+pip install -r scratch/myApp/requirements.txt
+python3 scratch/myApp/myAppStats-parse-results.py myApp.appStats.json
+```
+
 ### Flow Monitor (**IP-based**)
 https://www.nsnam.org/docs/models/html/flow-monitor.html
 
@@ -84,7 +90,7 @@ Flow 1 (10.1.2.1 -> 10.2.1.2)
 
 * Or use `flowmon-parse-results.py` to get delay/jitter histogram
 ```shell
-python3 ns-3.30.1/scratch/myApp/flowmon-parse-results.py myApp.flowmon.xml
+python3 scratch/myApp/flowmon-parse-results.py myApp.flowmon.xml
 
 ...
 Delay Histogram
@@ -141,3 +147,4 @@ appClient->Setup (
 
 ## Knwon Problems
 1. TCP aggreates data, including the retransmissions, as many as possile into one signle socket to transmit. It only bounds with SegmentSize (536). In contrast, UDP does not aggregrate its data.
+2. High CSMA error rate (larger than 25%) may cuase TCP disconnection. Our simulation cannot receover from this case.
